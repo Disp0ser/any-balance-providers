@@ -14,7 +14,10 @@
 	<files>
 		<icon>icon.png</icon>
 		<preferences>preferences.xml</preferences>
+<<<<<<< HEAD
 		<js>library.min.js</js>
+=======
+>>>>>>> c729cd07157ba57288785b89aa899b51bd455427
 		<js>main.js</js>
 		<history>history.xml</history>
 	</files>
