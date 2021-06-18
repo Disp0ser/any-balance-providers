@@ -20,43 +20,57 @@ function main() {
 	AB.checkEmpty(prefs.login, 'Введите логин!');
 	AB.checkEmpty(prefs.password, 'Введите пароль!');
 
-	var html = AnyBalance.requestGet(baseurl + 'bonus/', g_headers);
+//	var grc_response = solveRecaptcha('Пожалуйста, подтвердите, что вы не робот', baseurl, '6LcxEwkUAAAAAHluJu_MhGMLI2hbzWPNAATYetWH');
+	var html = AnyBalance.requestGet(baseurl + 'personal/', g_headers);
 
 	if (!html || AnyBalance.getLastStatusCode() > 400) {
 		AnyBalance.trace(html);
+                AnyBalance.requestGet(baseurl + 'personal/?logout=yes', g_headers);
 		throw new AnyBalance.Error('Ошибка при подключении к сайту провайдера! Попробуйте обновить данные позже.');
 	}
-
-//	var grc_response = solveRecaptcha('Пожалуйста, подтвердите, что вы не робот', baseurl, '6LcxEwkUAAAAAHluJu_MhGMLI2hbzWPNAATYetWH');
-
-	html = AnyBalance.requestPost(baseurl + 'ajax/auth_user.php', {
-		AUTH_FORM:	'Y',
-		TYPE:		'AUTH',
-		backurl:	'/personal/',
-		login: prefs.login,
-		password: prefs.password
-	}, AB.addHeaders({
-		'X-Requested-With': 'XMLHttpRequest',
-		Accept: 'application/json, text/javascript, */*; q=0.01',
-		Referer: baseurl + 'bonus'
-	}), {HTTP_METHOD: 'POST'});
-
-	var json = AB.getJson(html);
-
-	if (!json.res) {
-		var error = json.mess;
-		if (error) {
-			throw new AnyBalance.Error(error, null, /парол/i.test(error));
+	if (!/logout/i.test(html)){
+		AnyBalance.trace('Нужно логинится');
+		var token=getParam(html,  /CSRF"[\s\S]*?"([^"]*)/i, replaceTagsAndSpaces);
+		if (/@/.test(prefs.login)){
+			var auth_method='email';
+		}else{
+			var auth_method='phone';
+			prefs.login='+7 ('+prefs.login.replace(/[^\d]*/g,'').substr(-10).replace(/(\d{3})(\d{3})(\d{2})(\d{2})/,'$1) $2-$3-$4')
 		}
-		AnyBalance.trace(html);
-		throw new AnyBalance.Error('Не удалось зайти в личный кабинет. Сайт изменен?');
-	}
 
+		html = AnyBalance.requestPost(baseurl + 'ajax/auth_user.php', {
+			AUTH_FORM:	'Y',
+			TYPE:		'AUTH',
+			backurl:	'/personal/',
+			login: prefs.login,
+			password: prefs.password,
+	                auth_method: auth_method,
+	                CSRF:token
+		}, AB.addHeaders({
+			'X-Requested-With': 'XMLHttpRequest',
+			Accept: 'application/json, text/javascript, */*; q=0.01',
+			Referer: baseurl + 'bonus'
+		}), {HTTP_METHOD: 'POST'});
+
+		var json = AB.getJson(html);
+
+		if (!json.res) {
+			var error = json.mess;
+			if (error) {
+				AnyBalance.requestGet(baseurl + 'personal/?logout=yes', g_headers);
+				throw new AnyBalance.Error(error, null, /парол/i.test(error));
+			}
+			AnyBalance.trace(html);
+			AnyBalance.requestGet(baseurl + 'personal/?logout=yes', g_headers);
+			throw new AnyBalance.Error('Не удалось зайти в личный кабинет. Сайт изменен?');
+		}
+		html = AnyBalance.requestGet(baseurl + 'personal/', addHeaders({Referer: baseurl}));
+	}
 	var result = {
 		success: true
 	};
 
-	html = AnyBalance.requestGet(baseurl + 'personal/', addHeaders({Referer: baseurl}));
+
 
 	getParam(html, result, 'fio', /<div[^>]+client-name[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces);
 	getParam(html, result, 'balance', /<div[^>]+client-points__active[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
@@ -64,4 +78,5 @@ function main() {
 	AB.getParam(html, result, 'card', /<div[^>]+personal-card__number[^>]*>([\s\S]*?)<\/div>/i, AB.replaceTagsAndSpaces);
 
 	AnyBalance.setResult(result);
+
 }

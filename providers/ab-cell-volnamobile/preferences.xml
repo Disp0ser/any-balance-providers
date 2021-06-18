@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen>
+    <EditTextPreference 
+        title="Логин" 
+        positiveButtonText="ОК" 
+        summary="Номер телефона||{@s}\n" 
+        dialogTitle="Номер телефона" 
+        negativeButtonText="Отмена" 
+        dialogMessage="Введите номер вашего телефона для входа в личный кабинет"
+	obligatory="true"
+        key="login"
+        inputType="number">
+    </EditTextPreference>
+    <EditTextPreference 
+        positiveButtonText="ОК"
+        key="password" 
+        dialogTitle="Пароль"
+        negativeButtonText="Отмена"
+        title="Пароль"
+	obligatory="true"
+        summary="|Пароль не введен|Пароль введен (скрыт)"
+        dialogMessage="Введите пароль, используемый для входа в личный кабинет."
+        inputType="textPassword">
+    </EditTextPreference>
+	<CheckBoxPreference
+		title="Названия пакетов SMS, минут, мегабайт"
+		defaultValue="true"
+		summaryOn="Показывать названия пакетов"
+		summaryOff="Не показывать названия пакетов"
+		key="needPref" />
+
+</PreferenceScreen>

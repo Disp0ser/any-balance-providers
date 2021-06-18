@@ -3,24 +3,120 @@
  */
 
 var g_headers = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.3',
-    'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4',
-    'Connection': 'close',
-    'Origin': 'https://www.s7.ru',
-    'Referer': 'https://www.s7.ru/',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 5.0; SM-G900F Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.93 Mobile Safari/537.36'
+	accept: 'application/json',
+	authorization: 'Basic YW5kcm9pZDpUUFh3aFg0RnRYZUxTZXRkVjhURWE4NnBXOEE5aFZGdA==',
+	'x-language': 'en',
+	'x-platform': 'android',
+	'x-application-version': '4.3.4',
+	'x-device': '',
+	Connection: 'Keep-Alive',
+	'Accept-Encoding': 'gzip',
+	'User-Agent': 'okhttp/4.9.0',
+	ADRUM_1: 'isMobile:true',
+	ADRUM: 'isAjax:true'
 };
 
-var getFormCodeFromStatus = function(xFormStatus) {
-    var code = xFormStatus;
-    var i, l, hval = 0x811c9dc5;
-    for (i = 0, l = code.length; i < l; i++) {
-        hval ^= code.charCodeAt(i);
-        hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24);
-    }
-    return code + "_" + hval.toString(16);
-};
+function callApi(verb, params){
+	var method = 'GET', params_str = '', headers = g_headers;
+	if(params){
+		params_str = JSON.stringify(params);
+		method = 'POST';
+		headers = addHeaders({'Content-Type': 'application/json; charset=UTF-8'});
+	}
+	
+	var html = AnyBalance.requestPost('https://ps3.api.s7.ru/' + verb, params_str, headers, {HTTP_METHOD: method});
+	var json = getJson(html);
+	if(json.error){
+		var error = json.error.message || json.error;
+		if(error)
+			throw new AnyBalance.Error(error,null, /crede/i.test(error));
+		AnyBalance.trace(html);
+		throw new AnyBalance.Error('Не удалось зайти в личный кабинет. Сайт изменен?');
+	}
+
+	return json;
+}
+
+function generateUUID() {
+	function s4() {
+  		return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+	}
+  	return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
+}
+
+function getDeviceId(){
+	var prefs = AnyBalance.getPreferences();
+	var id = hex_md5(prefs.login);
+	return id;
+}
+
+function loginPure(){
+	var prefs = AnyBalance.getPreferences(), json;
+	
+	var type = 'CARD';
+	if(/@/.test(prefs.login))
+		type = 'EMAIL';
+	else if(/^\+\d+$/.test(prefs.login))
+		type = 'PHONE';
+
+	var json = callApi('auth/api/profiles/tickets', {
+        "device": getDeviceId(),
+        "id": prefs.login,
+        "secret": prefs.password,
+//        "temporaryResource": "a52cdf6b-aba9-4a94-8e6b-8b01f4081f64",
+        "type": type
+    });
+
+  	g_headers['x-token'] = json.ticket.token;
+
+    AnyBalance.setData('login', prefs.login);
+    AnyBalance.setData('token', json.ticket.token);
+    AnyBalance.setData('resid', json.ticket.resourceId);
+    AnyBalance.saveData();
+}
+
+function setAuthHeader(at){
+	if(at)
+		g_headers.Authorization = (at.token_type || at.tokenType) + ' ' + (at.access_token || at.accessToken);
+	else
+		delete g_headers.Authorization;
+}
+
+function loginAccessToken(){
+	var token = AnyBalance.getData('token');
+	try{
+	    g_headers['x-token'] = token;
+		callApi('profiles/api/profiles/' + AnyBalance.getData('resid'));
+		AnyBalance.trace('Удалось войти по token');
+		return true;
+	}catch(e){
+		AnyBalance.trace('Не удалось войти по token: ' + e.message);
+	    delete g_headers['x-token'];
+		return false;
+	}
+}
+
+function loginToken(){
+	var prefs = AnyBalance.getPreferences();
+
+	if(!AnyBalance.getData('token') || !AnyBalance.getData('resid')){
+		AnyBalance.trace("Токен не сохранен");
+		return false;
+	}
+
+	if(prefs.login != AnyBalance.getData('login')){
+		AnyBalance.trace("Токен соответствует другому логину");
+		return false;
+	}
+
+	return loginAccessToken();
+}
+
+function login(){
+	if(!loginToken()){
+		loginPure();
+	}
+}
 
 function main() {
     var prefs = AnyBalance.getPreferences();
@@ -29,67 +125,13 @@ function main() {
     checkEmpty(prefs.login, 'Введите логин!');
     checkEmpty(prefs.password, 'Введите пароль!');
 
-    var baseurl = 'https://www.s7.ru/';
+    g_headers['x-device'] = getDeviceId();
 
-    var html = AnyBalance.requestGet(baseurl, g_headers);
+    login();
 
-    if (!html || (AnyBalance.getLastStatusCode() >= 400)) {
-        AnyBalance.trace(html);
-        throw new AnyBalance.Error('Ошибка при подключении к сайту провайдера! Попробуйте обновить данные позже.');
-    }
+    var resid = AnyBalance.getData('resid');
 
-    html = AnyBalance.requestGet(baseurl + 'servlets/formprocess/formsecurity?action=checkStatus', g_headers);
-    var formStatus = AnyBalance.getLastResponseHeader('X-Form-Status');
-    if(!formStatus){
-    	AnyBalance.trace(html);
-    	throw new AnyBalance.Error('Не удалось получить токен авторизации. Сайт изменен?');
-    }
-
-    html = AnyBalance.requestGet(baseurl + 'servlets/formprocess/formsecurity?action=generateUiTicketUniqName', g_headers);
-    var json = getJson(html);
-    if(!json.c || !json.c.name){
-    	AnyBalance.trace(html);
-    	throw new AnyBalance.Error('Не удалось получить имя токена авторизации. Сайт изменен?');
-    }
-
-    var loginJson = AnyBalance.requestPost(baseurl + 'dotCMS/priority/ajaxLogin', {
-        dispatch: 'login',
-        username: prefs.login,
-        password: prefs.password,
-        ticketName: json.c.name,
-		uiTicket: json.c.value,
-        xFormCode: getFormCodeFromStatus(formStatus)
-    }, g_headers);
-    
-    var login = AB.getJson(loginJson);
-    if (login.status != 'success') {
-        var fatal = false;
-        if (login.status == 'error') {
-            var errorMsg = login.errors && login.errors[0];
-            if (/invalid.*credentials/.test(errorMsg)) {
-                errorMsg = "Неверный логин/пароль";
-            }
-            if (/iplock/.test(errorMsg)) {
-                errorMsg = "Авторизация временно невозможна.";
-            }
-            fatal = /не существует|логин|парол|корректный.*ПИН/.test(errorMsg);
-        }
-        throw new AnyBalance.Error(errorMsg || 'Ошибка авторизации.', false, fatal);
-    }
-    
-    var userDataJson = AnyBalance.requestGet(baseurl + 'dotCMS/priority/ajaxProfileService?dispatch=getUserInfo&_=' + Date.now(), g_headers);
-    
-    if (!userDataJson || (AnyBalance.getLastStatusCode() >= 400)) {
-        AnyBalance.trace(userDataJson);
-        throw new AnyBalance.Error('Ошибка при подключении к сайту провайдера! Попробуйте обновить данные позже.');
-    }
-    
-    var userData = AB.getJson(userDataJson);
-    
-    if (!userData.c) {
-        AnyBalance.trace(userDataJson);
-        throw new AnyBalance.Error('Не удалось получить данные.');
-    }
+    var jsonLoyalty = callApi('loyalty/api/loyalties/' + resid);
 
     var cardLevels = {
         CLASSIC: 'Классическая',
@@ -101,13 +143,22 @@ function main() {
     var result = {
         success: true
     };
-    
-    AB.getParam(userData.c.milesBalance, result, 'balance');
-    AB.getParam(userData.c.cardNumber, result, 'cardnum');
-    AB.getParam(userData.c.qMiles, result, 'qmiles');
-    AB.getParam(userData.c.qFlights, result, 'flights');
-    AB.getParam(userData.c.firstName + ' ' + userData.c.lastName, result, 'userName');
-    AB.getParam(cardLevels[userData.c.cardLevel] || userData.c.cardLevel, result, 'type');
 
+    for(var i=0; i<jsonLoyalty.profile.balancesContainer.length; ++i){
+    	var b = jsonLoyalty.profile.balancesContainer[i];
+    	if(b.type === 'REDEMPTION')
+    		AB.getParam(b.value, result, 'balance');
+    	if(b.type === 'QUALIFYING')
+    		AB.getParam(b.value, result, 'qmiles');
+    	if(b.type === 'FLIGHTS')
+    		AB.getParam(b.value, result, 'flights');
+    }
+                      
+    AB.getParam(jsonLoyalty.profile.memberId, result, 'cardnum');
+
+    AB.getParam(jsonLoyalty.profile.names[0].firstName + ' ' + jsonLoyalty.profile.names[0].lastName, result, 'userName');
+    AB.getParam(cardLevels[jsonLoyalty.profile.eliteTier.level] || jsonLoyalty.profile.eliteTier.level, result, 'type');
+    AB.getParam(cardLevels[jsonLoyalty.profile.eliteTier.level] || jsonLoyalty.profile.eliteTier.level, result, '__tariff');
+                        
     AnyBalance.setResult(result);
 }

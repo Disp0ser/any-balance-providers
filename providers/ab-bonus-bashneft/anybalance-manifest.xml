@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <provider>
-	<id version="3">ab-bonus-bashneft</id>
+	<id version="5">ab-bonus-bashneft</id>
 	<api flags="no_browser"/>
 	<name>БАШНЕФТЬ (сеть АЗС)</name>
 	<description html="true"><![CDATA[
@@ -8,6 +8,7 @@
 	<p>Информация берется из личного кабинета <a href="https://www.bashneft-azs.ru/loyalty/personal/">https://www.bashneft-azs.ru/loyalty/personal/</a></p>
 	]]></description>
 	<author>AnyBalance Team &lt;info@anybalance.ru&gt;</author>
+	<author>DimaZ &lt;DIMAZ.KHUA@gmail.com&gt;</author>
 	<depends>
 		<module id="library"/>
 	</depends>
